@@ -91,16 +91,17 @@ madgwick_filter = MadgwickFilter()
 # Convert quaternion to roll, pitch, yaw (Euler Angles)
 def quaternion_to_euler(q):
     w, x, y, z = q
-    
-    # Roll (rotation around X-axis)
+
+    # Roll (X-axis rotation)
     roll = math.atan2(2.0 * (w * x + y * z), 1.0 - 2.0 * (x * x + y * y))
-    
-    # Pitch (rotation around Y-axis)
-    pitch = math.asin(2.0 * (w * y - z * x))
-    
-    # Yaw (rotation around Z-axis)
+
+    # Pitch (Y-axis rotation)
+    # Prevent gimbal lock by clamping pitch value within [-90°, 90°]
+    pitch = math.asin(max(-1.0, min(1.0, 2.0 * (w * y - z * x))))
+
+    # Yaw (Z-axis rotation)
     yaw = math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
-    
+
     # Convert from radians to degrees for easier interpretation
     return math.degrees(roll), math.degrees(pitch), math.degrees(yaw)
 
@@ -145,7 +146,7 @@ with open("data.bin", "wb") as bin_file:
 
         # Pack data for binary write
         data_packet = struct.pack(
-            "f 3f 3f 3f 4f 3f",
+            "f 3f 3f 3f f f f f f",
             current_time,       # Timestamp
             x_cal, y_cal, z_cal,  # H3LIS331 Calibrated Acceleration
             IMU_accel_x, IMU_accel_y, IMU_accel_z,  # MPU6050 Acceleration
