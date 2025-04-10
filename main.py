@@ -14,7 +14,12 @@ import serial
 import os
 import busio
 import digitalio
+import subprocess
 
+try:
+    subprocess.run(["sudo", "chmod", "666", "/dev/ttyS0"], check=True)
+except subprocess.CalledProcessError:
+    print("Failed to chmod /dev/ttyS0 — make sure user has sudo access.")
 
 # Initialize I2C bus
 i2c = busio.I2C(board.SCL, board.SDA)
