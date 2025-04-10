@@ -24,7 +24,7 @@ except subprocess.CalledProcessError:
 # Initialize I2C bus
 i2c = busio.I2C(board.SCL, board.SDA)
 
-led = digitalio.DigitalInOut(board.D16)
+led = digitalio.DigitalInOut(board.D27)
 led.direction = digitalio.Direction.OUTPUT
 
 # Initialize sensors
