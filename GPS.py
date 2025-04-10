@@ -5,6 +5,12 @@ import struct
 import time
 import board
 import digitalio
+import subprocess
+
+try:
+    subprocess.run(["sudo", "chmod", "666", "/dev/ttyS0"], check=True)
+except subprocess.CalledProcessError:
+    print("Failed to chmod /dev/ttyS0 — make sure user has sudo access.")
 
 # Set up LED on GPIO D17
 led = digitalio.DigitalInOut(board.D17)
