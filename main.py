@@ -8,45 +8,13 @@ import struct
 import numpy as np
 import adafruit_bmp3xx
 import adafruit_lis331
+import adafruit_mpu6050
 import pickle
 import serial
 import os
 import busio
 import digitalio
 
-pulsarString = """
-  _____  _    _ _       _____         _____  
- |  __ \| |  | | |     / ____|  /\   |  __ \ 
- | |__) | |  | | |    | (___   /  \  | |__) |
- |  ___/| |  | | |     \___ \ / /\ \ |  _  / 
- | |    | |__| | |____ ____) / ____ \| | \ \ 
- |_|     \____/|______|_____/_/    \_\_|  \_\
-                                             
-"""
-
-lifts = """
-  _      _____ ______ _______ _____  __      ____   ___  
- | |    |_   _|  ____|__   __/ ____| \ \    / /_ | |__ \ 
- | |      | | | |__     | | | (___    \ \  / / | |    ) |
- | |      | | |  __|    | |  \___ \    \ \/ /  | |   / / 
- | |____ _| |_| |       | |  ____) |    \  /   | |_ / /_ 
- |______|_____|_|       |_| |_____/      \/    |_(_)____|
-                                                         
-
-
-  ______ _ _       _     _      _____                            _            
- |  ____| (_)     | |   | |    / ____|                          | |           
- | |__  | |_  __ _| |__ | |_  | |     ___  _ __ ___  _ __  _   _| |_ ___ _ __ 
- |  __| | | |/ _` | '_ \| __| | |    / _ \| '_ ` _ \| '_ \| | | | __/ _ \ '__|
- | |    | | | (_| | | | | |_  | |___| (_) | | | | | | |_) | |_| | ||  __/ |   
- |_|    |_|_|\__, |_| |_|\__|  \_____\___/|_| |_| |_| .__/ \__,_|\__\___|_|   
-              __/ |                                 | |                       
-             |___/                                  |_|                       
-
-                                                         
-"""
-print(pulsarString)
-print(lifts)
 
 # Initialize I2C bus
 i2c = busio.I2C(board.SCL, board.SDA)
@@ -56,6 +24,7 @@ led.direction = digitalio.Direction.OUTPUT
 
 # Initialize sensors
 bmp = adafruit_bmp3xx.BMP3XX_I2C(i2c)
+mpu = adafruit_mpu6050.MPU6050(i2c)
 
 sensor = adafruit_lis331.H3LIS331(i2c)
 sensor.range = adafruit_lis331.H3LIS331Range.RANGE_100G
@@ -147,6 +116,14 @@ with open("data.bin", "wb") as bin_file:
         except:
             led.value = True
             pressure, altitude, temperature = 0.0, 0.0, 0.0
+        try:
+            led.value = False  
+            IMU_accel_x, IMU_accel_y, IMU_accel_z = mpu.acceleration
+            IMU_gyro_x, IMU_gyro_y, IMU_gyro_z = mpu.gyro
+        except:
+            led.value = True
+            IMU_accel_x, IMU_accel_y, IMU_accel_z = 0.0, 0.0, 0.0
+            IMU_gyro_x, IMU_gyro_y, IMU_gyro_z = 0.0, 0.0, 0.0
 
         # Read GPS data
         gps_data_received = False
@@ -173,15 +150,19 @@ with open("data.bin", "wb") as bin_file:
 
         # Print the sensor values as they are read
         print(f"Time: {current_time:.6f}s")
-        print(f"H3LIS Accel - X: {x_cal:.3f} Y: {y_cal:.3f} Z: {z_cal:.3f} g")
+        print(f"H3LIS Accel - X: {x_cal:.3f} Y: {y_cal:.3f} Z: {z_cal:.3f} m/s^2")
+        print(f"MPU6050 Accel - X: {IMU_accel_x:.3f} Y: {IMU_accel_y:.3f} Z: {IMU_accel_z:.3f} m/s^2")
+        print(f"MPU6050 Gyro - X: {IMU_gyro_x:.3f} Y: {IMU_gyro_y:.3f} Z: {IMU_gyro_z:.3f}")
         print(f"Pressure: {pressure:.3f} hPa Altitude: {altitude:.3f} meters Temperature: {temperature:.3f} °C")
         print(f"GPS - Time: {gps_last_data['time']}, Latitude: {gps_last_data['latitude']}, Longitude: {gps_last_data['longitude']}, Speed: {gps_last_data['speed']} knots, Course: {gps_last_data['course']}°")
-        
+
         # Pack data for binary write
         data_packet = struct.pack(
-            "f 3f 3f f f f f",
+            "f 3f 3f 3f 3f f f f f",
             current_time,       # Timestamp
             x_cal, y_cal, z_cal,  # H3LIS331 Calibrated Acceleration
+            IMU_accel_x, IMU_accel_y, IMU_accel_z,  # MPU6050 Acceleration
+            IMU_gyro_x, IMU_gyro_y, IMU_gyro_z,  # MPU6050 Gyroscope
             pressure, altitude, temperature,  # BMP390
             gps_last_data['latitude'], gps_last_data['longitude'], gps_last_data['speed'], gps_last_data['course']  # GPS Data
         )
