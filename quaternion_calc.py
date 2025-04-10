@@ -6,7 +6,6 @@ import adafruit_lis331
 import adafruit_mpu6050
 import pickle
 import busio
-import digitalio
 import math
 
 # Madgwick filter implementation (Quaternion-based sensor fusion)
@@ -25,7 +24,7 @@ class MadgwickFilter:
         ay /= norm
         az /= norm
 
-        # Gyroscope data (rad/s)
+        # Convert gyroscope data from degrees per second to radians per second
         gx = math.radians(gx)
         gy = math.radians(gy)
         gz = math.radians(gz)
@@ -109,9 +108,12 @@ def quaternion_to_euler(q):
 # Open binary file for writing
 with open("data.bin", "wb") as bin_file:
     start_time = time.time()  # Timestamp start
+    last_time = start_time
 
     while True:
-        current_time = time.time() - start_time  # Elapsed time
+        current_time = time.time()  # Current timestamp
+        dt = current_time - last_time  # Calculate time difference (delta time)
+        last_time = current_time  # Update the last time
 
         # Read sensors
         try:
@@ -128,8 +130,8 @@ with open("data.bin", "wb") as bin_file:
             IMU_accel_x, IMU_accel_y, IMU_accel_z = 0.0, 0.0, 0.0
             IMU_gyro_x, IMU_gyro_y, IMU_gyro_z = 0.0, 0.0, 0.0
 
-        # Update Madgwick filter with sensor data
-        madgwick_filter.update(x_cal, y_cal, z_cal, IMU_gyro_x, IMU_gyro_y, IMU_gyro_z, 0.05)
+        # Update Madgwick filter with sensor data (converted gyro values)
+        madgwick_filter.update(x_cal, y_cal, z_cal, IMU_gyro_x, IMU_gyro_y, IMU_gyro_z, dt)
 
         # Get quaternion representing the orientation
         q = madgwick_filter.get_orientation()
