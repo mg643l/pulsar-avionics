@@ -88,6 +88,23 @@ def apply_offsets(x, y, z, x_offset, y_offset, z_offset):
 # Initialize Madgwick filter
 madgwick_filter = MadgwickFilter()
 
+# Convert quaternion to roll, pitch, yaw (Euler Angles)
+def quaternion_to_euler(q):
+    w, x, y, z = q
+    
+    # Roll (rotation around X-axis)
+    roll = math.atan2(2.0 * (w * x + y * z), 1.0 - 2.0 * (x * x + y * y))
+    
+    # Pitch (rotation around Y-axis)
+    pitch = math.asin(2.0 * (w * y - z * x))
+    
+    # Yaw (rotation around Z-axis)
+    yaw = math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+    
+    # Convert from radians to degrees for easier interpretation
+    return math.degrees(roll), math.degrees(pitch), math.degrees(yaw)
+
+
 # Open binary file for writing
 with open("data.bin", "wb") as bin_file:
     start_time = time.time()  # Timestamp start
@@ -116,21 +133,25 @@ with open("data.bin", "wb") as bin_file:
         # Get quaternion representing the orientation
         q = madgwick_filter.get_orientation()
 
-        # Print the sensor values and orientation quaternion
+        # Convert quaternion to roll, pitch, yaw
+        roll, pitch, yaw = quaternion_to_euler(q)
+
+        # Print the sensor values and Euler angles
         print(f"Time: {current_time:.6f}s")
         print(f"H3LIS Accel - X: {x_cal:.3f} Y: {y_cal:.3f} Z: {z_cal:.3f} m/s^2")
         print(f"MPU6050 Accel - X: {IMU_accel_x:.3f} Y: {IMU_accel_y:.3f} Z: {IMU_accel_z:.3f} m/s^2")
         print(f"MPU6050 Gyro - X: {IMU_gyro_x:.3f} Y: {IMU_gyro_y:.3f} Z: {IMU_gyro_z:.3f}")
-        print(f"Quaternion: w: {q[0]:.3f} x: {q[1]:.3f} y: {q[2]:.3f} z: {q[3]:.3f}")
+        print(f"Euler Angles: Roll: {roll:.3f}° Pitch: {pitch:.3f}° Yaw: {yaw:.3f}°")
 
         # Pack data for binary write
         data_packet = struct.pack(
-            "f 3f 3f 3f f f f f",
+            "f 3f 3f 3f f f f f f",
             current_time,       # Timestamp
             x_cal, y_cal, z_cal,  # H3LIS331 Calibrated Acceleration
             IMU_accel_x, IMU_accel_y, IMU_accel_z,  # MPU6050 Acceleration
             IMU_gyro_x, IMU_gyro_y, IMU_gyro_z,  # MPU6050 Gyroscope
-            q[0], q[1], q[2], q[3]  # Quaternion (w, x, y, z)
+            q[0], q[1], q[2], q[3],  # Quaternion (w, x, y, z)
+            roll, pitch, yaw  # Euler Angles (Roll, Pitch, Yaw)
         )
 
         # Write the packed data to the binary file
