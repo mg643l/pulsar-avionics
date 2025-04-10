@@ -7,7 +7,7 @@ import adafruit_mpu6050
 import pickle
 import busio
 import digitalio
-
+import math
 
 # Initialize I2C bus
 i2c = busio.I2C(board.SCL, board.SDA)
@@ -15,7 +15,6 @@ i2c = busio.I2C(board.SCL, board.SDA)
 # Initialize sensors
 bmp = adafruit_bmp3xx.BMP3XX_I2C(i2c)
 mpu = adafruit_mpu6050.MPU6050(i2c)
-
 sensor = adafruit_lis331.H3LIS331(i2c)
 sensor.range = adafruit_lis331.H3LIS331Range.RANGE_100G
 
@@ -36,6 +35,18 @@ print(f"Loaded Offsets: X: {x_offset}, Y: {y_offset}, Z: {z_offset}")
 def apply_offsets(x, y, z, x_offset, y_offset, z_offset):
     return x - x_offset, y - y_offset, z - z_offset
 
+# Function to calculate roll and pitch
+def calculate_roll_pitch(x, y, z):
+    # Calculate roll and pitch in radians
+    roll = math.atan2(y, math.sqrt(x**2 + z**2))
+    pitch = math.atan2(-x, math.sqrt(y**2 + z**2))
+    
+    # Convert to degrees for easier interpretation
+    roll_deg = math.degrees(roll)
+    pitch_deg = math.degrees(pitch)
+    
+    return roll_deg, pitch_deg
+
 # Open binary file for writing
 with open("data.bin", "wb") as bin_file:
     start_time = time.time()  # Timestamp start
@@ -49,6 +60,9 @@ with open("data.bin", "wb") as bin_file:
             x_cal, y_cal, z_cal = apply_offsets(x, y, z, x_offset, y_offset, z_offset)
         except:
             x_cal, y_cal, z_cal = 0.0, 0.0, 0.0
+
+        # Calculate roll and pitch
+        roll, pitch = calculate_roll_pitch(x_cal, y_cal, z_cal)
 
         # Read BMP390 data
         try:
@@ -64,21 +78,23 @@ with open("data.bin", "wb") as bin_file:
             IMU_accel_x, IMU_accel_y, IMU_accel_z = 0.0, 0.0, 0.0
             IMU_gyro_x, IMU_gyro_y, IMU_gyro_z = 0.0, 0.0, 0.0
 
-        # Print the sensor values as they are read
+        # Print the sensor values and roll/pitch
         print(f"Time: {current_time:.6f}s")
         print(f"H3LIS Accel - X: {x_cal:.3f} Y: {y_cal:.3f} Z: {z_cal:.3f} m/s^2")
+        print(f"Roll: {roll:.3f}° Pitch: {pitch:.3f}°")
         print(f"MPU6050 Accel - X: {IMU_accel_x:.3f} Y: {IMU_accel_y:.3f} Z: {IMU_accel_z:.3f} m/s^2")
         print(f"MPU6050 Gyro - X: {IMU_gyro_x:.3f} Y: {IMU_gyro_y:.3f} Z: {IMU_gyro_z:.3f}")
         print(f"Pressure: {pressure:.3f} hPa Altitude: {altitude:.3f} meters Temperature: {temperature:.3f} °C")
 
         # Pack data for binary write
         data_packet = struct.pack(
-            "f 3f 3f 3f 3f",
+            "f 3f 3f 3f 3f f f",
             current_time,       # Timestamp
             x_cal, y_cal, z_cal,  # H3LIS331 Calibrated Acceleration
             IMU_accel_x, IMU_accel_y, IMU_accel_z,  # MPU6050 Acceleration
             IMU_gyro_x, IMU_gyro_y, IMU_gyro_z,  # MPU6050 Gyroscope
             pressure, altitude, temperature,  # BMP390
+            roll, pitch  # Roll and Pitch angles in degrees
         )
 
         # Write the packed data to the binary file
