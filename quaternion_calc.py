@@ -145,7 +145,7 @@ with open("data.bin", "wb") as bin_file:
 
         # Pack data for binary write
         data_packet = struct.pack(
-            "f 3f 3f 3f f f f f f",
+            "f 3f 3f 3f 3f 3f 3f 4f 3f",
             current_time,       # Timestamp
             x_cal, y_cal, z_cal,  # H3LIS331 Calibrated Acceleration
             IMU_accel_x, IMU_accel_y, IMU_accel_z,  # MPU6050 Acceleration
