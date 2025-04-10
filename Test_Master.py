@@ -8,16 +8,7 @@ import struct
 import numpy as np
 import adafruit_bmp3xx
 import adafruit_lis331
-from adafruit_bno08x.i2c import BNO08X_I2C
-from adafruit_bno08x import (
-    BNO_REPORT_ACCELEROMETER,
-    BNO_REPORT_ROTATION_VECTOR,
-    BNO_REPORT_GYROSCOPE,
-    BNO_REPORT_MAGNETOMETER,
-)
-import adafruit_lis331
 import pickle
-import struct
 import serial
 import os
 import busio
@@ -64,18 +55,10 @@ led = digitalio.DigitalInOut(board.D16)
 led.direction = digitalio.Direction.OUTPUT
 
 # Initialize sensors
-bno = BNO08X_I2C(i2c)
-bno.enable_feature(BNO_REPORT_ACCELEROMETER)
-bno.enable_feature(BNO_REPORT_ROTATION_VECTOR)
-bno.enable_feature(BNO_REPORT_GYROSCOPE)
-bno.enable_feature(BNO_REPORT_MAGNETOMETER)
-
 bmp = adafruit_bmp3xx.BMP3XX_I2C(i2c)
 
 sensor = adafruit_lis331.H3LIS331(i2c)
 sensor.range = adafruit_lis331.H3LIS331Range.RANGE_100G
-
-
 
 # Set a practical resolution for video recording (1080p)
 width = 1920  # Width for 1080p
@@ -103,10 +86,6 @@ process = subprocess.Popen(
 )
 
 print("Recording video... Press Ctrl+C to stop.")
-
-
-
-
 
 # Load calibration offsets
 def load_offsets(filename="offsets.bin"):
@@ -154,47 +133,20 @@ with open("data.bin", "wb") as bin_file:
 
         # Read sensors
         try:
-            led.value = False 
-            accel = bno.acceleration
-        except: 
-            led.value = True
-            accel = (0.0, 0.0, 0.0)
-
-        try:
-            led.value = False 
-            quat = bno.quaternion
-        except:
-            led.value = True 
-            quat = (0.0, 0.0, 0.0, 0.0)
-
-        try:
-            led.value = False 
-            gyro = bno.gyro
-        except: 
-            led.value = True
-            gyro = (0.0, 0.0, 0.0)
-
-        try:
             led.value = False  
-            mag = bno.magnetic
-        except:
-            led.value = True 
-            mag = (0.0, 0.0, 0.0)
-
-        try:
-            led.value = False 
-            pressure, altitude, temperature = bmp.pressure, bmp.altitude, bmp.temperature
-        except:
-            led.value = True
-            pressure, altitude, temperature = 0.0, 0.0, 0.0
-
-        try:
-            led.value = False 
             x, y, z = sensor.acceleration
             x_cal, y_cal, z_cal = apply_offsets(x, y, z, x_offset, y_offset, z_offset)
         except:
             led.value = True
             x_cal, y_cal, z_cal = 0.0, 0.0, 0.0
+
+        # Read BMP390 data
+        try:
+            led.value = False  
+            pressure, altitude, temperature = bmp.pressure, bmp.altitude, bmp.temperature
+        except:
+            led.value = True
+            pressure, altitude, temperature = 0.0, 0.0, 0.0
 
         # Read GPS data
         gps_data_received = False
@@ -221,24 +173,16 @@ with open("data.bin", "wb") as bin_file:
 
         # Print the sensor values as they are read
         print(f"Time: {current_time:.6f}s")
-        print(f"Accel - X: {accel[0]:0.6f} Y: {accel[1]:0.6f} Z: {accel[2]:0.6f} m/s²")
-        print(f"Quat - I: {quat[0]:0.6f} J: {quat[1]:0.6f} K: {quat[2]:0.6f} Real: {quat[3]:0.6f}")
-        print(f"Gyro - X: {gyro[0]:0.6f} Y: {gyro[1]:0.6f} Z: {gyro[2]:0.6f} rad/s")
-        print(f"Mag - X: {mag[0]:0.6f} Y: {mag[1]:0.6f} Z: {mag[2]:0.6f}")
-        print(f"Pressure: {pressure:.3f} hPa Altitude: {altitude:.3f} meters Temperature: {temperature:.3f} °C")
         print(f"H3LIS Accel - X: {x_cal:.3f} Y: {y_cal:.3f} Z: {z_cal:.3f} g")
+        print(f"Pressure: {pressure:.3f} hPa Altitude: {altitude:.3f} meters Temperature: {temperature:.3f} °C")
         print(f"GPS - Time: {gps_last_data['time']}, Latitude: {gps_last_data['latitude']}, Longitude: {gps_last_data['longitude']}, Speed: {gps_last_data['speed']} knots, Course: {gps_last_data['course']}°")
         
         # Pack data for binary write
         data_packet = struct.pack(
-            "f 3f 4f 3f 3f f f f 3f f f f f",
+            "f 3f f f f 3f f f f f",
             current_time,       # Timestamp
-            *accel,             # BNO085 Accelerometer
-            *quat,              # BNO085 Quaternion
-            *gyro,              # BNO085 Gyroscope
-            *mag,               # BNO085 Magnetometer
-            pressure, altitude, temperature,  # BMP390
             x_cal, y_cal, z_cal,  # H3LIS331 Calibrated Acceleration
+            pressure, altitude, temperature,  # BMP390
             gps_last_data['latitude'], gps_last_data['longitude'], gps_last_data['speed'], gps_last_data['course']  # GPS Data
         )
 
@@ -248,5 +192,3 @@ with open("data.bin", "wb") as bin_file:
         # Sleep for 20ms (50 Hz logging)
         led.value = False 
         time.sleep(0.05)
-        
-
