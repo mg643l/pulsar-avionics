@@ -7,6 +7,9 @@ import threading
 import struct
 import pickle
 import serial
+import adafruit_bmp3xx
+import adafruit_lis331
+import adafruit_mpu6050
 import os
 import busio
 import digitalio
