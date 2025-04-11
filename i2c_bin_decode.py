@@ -2,7 +2,7 @@ import struct
 import csv
 
 # Define binay format
-binary_format = "f 3f 3f 3f"
+binary_format = "f 3f 3f 3f 3f"
 data_size = struct.calcsize(binary_format)
 
 # Open binary file and convert to CSV

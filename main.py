@@ -14,12 +14,6 @@ import serial
 import os
 import busio
 import digitalio
-import subprocess
-
-try:
-    subprocess.run(["sudo", "chmod", "666", "/dev/ttyS0"], check=True)
-except subprocess.CalledProcessError:
-    print("Failed to chmod /dev/ttyS0 — make sure user has sudo access.")
 
 # Initialize I2C bus
 i2c = busio.I2C(board.SCL, board.SDA)
@@ -35,11 +29,11 @@ sensor = adafruit_lis331.H3LIS331(i2c)
 sensor.range = adafruit_lis331.H3LIS331Range.RANGE_100G
 
 # Set a practical resolution for video recording (1080p)
-width = 1920  # Width for 1080p
-height = 1080  # Height for 1080p
+width = 1280  # Width for 720p
+height = 720  # Height for 720p
 
-# Set framerate to 60fps
-framerate = 60
+# Set framerate to 30fps
+framerate = 30
 
 # Function to handle the interrupt signal
 def cameraInterrupt(sig, frame):
@@ -54,9 +48,9 @@ signal.signal(signal.SIGINT, cameraInterrupt)
 
 # Start recording video using libcamera-vid at 1080p resolution and specified framerate, output as H.264
 process = subprocess.Popen(
-    ['libcamera-vid', '--framerate', str(framerate), '--width', str(width), '--height', str(height), '-o', 'test60.h264'],
-    stdout=subprocess.DEVNULL,  # Suppress standard output
-    stderr=subprocess.DEVNULL   # Suppress standard error
+    ['libcamera-vid', '--framerate', str(framerate), '--width', str(width), '--height', str(height), '--rotation', '180', '--timeout', '0', '-o', 'FlightVideo.h264'],
+    stdout=subprocess.PIPE,  # Capture output
+    stderr=subprocess.PIPE   # Capture error
 )
 
 print("Recording video... Press Ctrl+C to stop.")

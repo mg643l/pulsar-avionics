@@ -79,12 +79,12 @@ with open("data.bin", "wb") as bin_file:
             IMU_gyro_x, IMU_gyro_y, IMU_gyro_z = 0.0, 0.0, 0.0
 
         # Print the sensor values and roll/pitch
-        print(f"Time: {current_time:.6f}s")
-        print(f"H3LIS Accel - X: {x_cal:.3f} Y: {y_cal:.3f} Z: {z_cal:.3f} m/s^2")
+        #print(f"Time: {current_time:.6f}s")
+        #print(f"H3LIS Accel - X: {x_cal:.3f} Y: {y_cal:.3f} Z: {z_cal:.3f} m/s^2")
         print(f"Roll: {roll:.3f}° Pitch: {pitch:.3f}°")
-        print(f"MPU6050 Accel - X: {IMU_accel_x:.3f} Y: {IMU_accel_y:.3f} Z: {IMU_accel_z:.3f} m/s^2")
-        print(f"MPU6050 Gyro - X: {IMU_gyro_x:.3f} Y: {IMU_gyro_y:.3f} Z: {IMU_gyro_z:.3f}")
-        print(f"Pressure: {pressure:.3f} hPa Altitude: {altitude:.3f} meters Temperature: {temperature:.3f} °C")
+        #print(f"MPU6050 Accel - X: {IMU_accel_x:.3f} Y: {IMU_accel_y:.3f} Z: {IMU_accel_z:.3f} m/s^2")
+        #print(f"MPU6050 Gyro - X: {IMU_gyro_x:.3f} Y: {IMU_gyro_y:.3f} Z: {IMU_gyro_z:.3f}")
+        #print(f"Pressure: {pressure:.3f} hPa Altitude: {altitude:.3f} meters Temperature: {temperature:.3f} °C")
 
         # Pack data for binary write
         data_packet = struct.pack(
