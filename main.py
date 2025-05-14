@@ -3,172 +3,177 @@ import time
 import signal
 import sys
 import board
-import threading
 import struct
-import numpy as np
+import pickle
+import serial
 import adafruit_bmp3xx
 import adafruit_lis331
 import adafruit_mpu6050
-import pickle
-import serial
-import os
 import busio
 import digitalio
+import os
 
-# Initialize I2C bus
+# Constants
+BUFFER_SIZE = 50
+TARGET_HZ = 50
+SAMPLE_INTERVAL = 1.0 / TARGET_HZ
+
+# Initialize I2C
 i2c = busio.I2C(board.SCL, board.SDA)
 
+# Setup status LED
 led = digitalio.DigitalInOut(board.D27)
 led.direction = digitalio.Direction.OUTPUT
+led.value = False
 
 # Initialize sensors
 bmp = adafruit_bmp3xx.BMP3XX_I2C(i2c)
 mpu = adafruit_mpu6050.MPU6050(i2c)
-
 sensor = adafruit_lis331.H3LIS331(i2c)
 sensor.range = adafruit_lis331.H3LIS331Range.RANGE_100G
 
-# Set a practical resolution for video recording (1080p)
-width = 1280  # Width for 720p
-height = 720  # Height for 720p
-
-# Set framerate to 30fps
-framerate = 30
-
-# Function to handle the interrupt signal
-def cameraInterrupt(sig, frame):
-    print("Recording stopped.")
-    process.terminate()  # Terminate the recording process
-    process.wait()  # Wait for the process to finish
-    print("Video Successfully Recorded in H.264 format!")
-    sys.exit(0)
-
-# Register the signal handler for graceful exit
-signal.signal(signal.SIGINT, cameraInterrupt)
-
-# Start recording video using libcamera-vid at 1080p resolution and specified framerate, output as H.264
-process = subprocess.Popen(
-    ['libcamera-vid', '--framerate', str(framerate), '--width', str(width), '--height', str(height), '--rotation', '180', '--timeout', '0', '-o', 'FlightVideo.h264'],
-    stdout=subprocess.PIPE,  # Capture output
-    stderr=subprocess.PIPE   # Capture error
-)
-
-print("Recording video... Press Ctrl+C to stop.")
-
-# Load calibration offsets
+# Load calibration
 def load_offsets(filename="offsets.bin"):
     try:
-        with open(filename, "rb") as file:
-            return pickle.load(file)
+        with open(filename, "rb") as f:
+            return pickle.load(f)
     except FileNotFoundError:
         led.value = True
         print("Error: Calibration file not found. Run calibration first.")
-        exit(1)
+        sys.exit(1)
 
 x_offset, y_offset, z_offset = load_offsets()
-print(f"Loaded Offsets: X: {x_offset}, Y: {y_offset}, Z: {z_offset}")
+print(f"Loaded Offsets: X={x_offset}, Y={y_offset}, Z={z_offset}")
 
-# Function to apply offsets
-def apply_offsets(x, y, z, x_offset, y_offset, z_offset):
-    return x - x_offset, y - y_offset, z - z_offset
-
-# Function to convert latitude and longitude to decimal degrees
+# Convert GPS data
 def convert_to_decimal(degrees_minutes, direction):
-    degrees = int(degrees_minutes[:len(degrees_minutes)-7])  # Extract degrees
-    minutes = float(degrees_minutes[len(degrees_minutes)-7:])  # Extract minutes
-    decimal = degrees + (minutes / 60)  # Convert to decimal degrees
-    if direction in ["S", "W"]:
-        decimal *= -1  # Apply negative for South and West
-    return decimal
+    degrees = int(degrees_minutes[:len(degrees_minutes) - 7])
+    minutes = float(degrees_minutes[len(degrees_minutes) - 7:])
+    decimal = degrees + (minutes / 60)
+    return -decimal if direction in ["S", "W"] else decimal
 
-# Open the serial port for GPS
+# Open GPS serial
 try:
     uart = serial.Serial("/dev/serial0", baudrate=9600, timeout=1)
     print("Serial port opened successfully")
 except Exception as e:
-    print(f"Error: {e}")
+    print(f"Error opening serial port: {e}")
     led.value = True
-    exit(1)
+    sys.exit(1)
 
-# Open binary file for writing
+# Video settings
+width, height, framerate = 1920, 1080, 30
+
+# Start video recording
+video_process = subprocess.Popen(
+    ['libcamera-vid', '--framerate', str(framerate),
+     '--width', str(width), '--height', str(height),
+     '--rotation', '180', '--timeout', '0',
+     '-o', 'TestFlightVideo.h264'],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE
+)
+
+print("Recording video... Press Ctrl+C to stop.")
+
+# Handle Ctrl+C
+def camera_interrupt(sig, frame):
+    print("\nInterrupt received, stopping recording...")
+    video_process.terminate()
+    video_process.wait()
+    print("Video successfully recorded in H.264 format!")
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, camera_interrupt)
+
+# Prepare GPS default
+gps_last_data = {
+    'latitude': 0.0, 'longitude': 0.0,
+    'speed': 0.0, 'course': 0.0,
+    'time': '00:00:00', 'date': '00/00/00'
+}
+
+# Open binary file for logging
+packet_buffer = []
+start_time = time.time()
+
 with open("data.bin", "wb") as bin_file:
-    start_time = time.time()  # Timestamp start
-    gps_last_data = {'latitude': 0.0, 'longitude': 0.0, 'speed': 0.0, 'course': 0.0, 'time': '00:00:00', 'date': '00/00/00'}
-
     while True:
-        led.value = False
-        current_time = time.time() - start_time  # Elapsed time
+        loop_start = time.time()
+        current_time = time.time() - start_time
 
-        # Read sensors
+        # Read H3LIS accelerometer
         try:
-            led.value = False  
             x, y, z = sensor.acceleration
-            x_cal, y_cal, z_cal = apply_offsets(x, y, z, x_offset, y_offset, z_offset)
+            x_cal, y_cal, z_cal = x - x_offset, y - y_offset, z - z_offset
         except:
             led.value = True
-            x_cal, y_cal, z_cal = 0.0, 0.0, 0.0
+            x_cal = y_cal = z_cal = 0.0
 
-        # Read BMP390 data
+        # Read BMP388
         try:
-            led.value = False  
-            pressure, altitude, temperature = bmp.pressure, bmp.altitude, bmp.temperature
+            pressure = bmp.pressure
+            altitude = bmp.altitude
+            temperature = bmp.temperature
         except:
             led.value = True
-            pressure, altitude, temperature = 0.0, 0.0, 0.0
-        try:
-            led.value = False  
-            IMU_accel_x, IMU_accel_y, IMU_accel_z = mpu.acceleration
-            IMU_gyro_x, IMU_gyro_y, IMU_gyro_z = mpu.gyro
-        except:
-            led.value = True
-            IMU_accel_x, IMU_accel_y, IMU_accel_z = 0.0, 0.0, 0.0
-            IMU_gyro_x, IMU_gyro_y, IMU_gyro_z = 0.0, 0.0, 0.0
+            pressure = altitude = temperature = 0.0
 
-        # Read GPS data
+        # Read MPU6050
+        try:
+            ax, ay, az = mpu.acceleration
+            gx, gy, gz = mpu.gyro
+        except:
+            led.value = True
+            ax = ay = az = gx = gy = gz = 0.0
+
+        # Read GPS if available
         gps_data_received = False
         if uart.in_waiting > 0:
-            data = uart.readline().decode('ascii', errors='ignore').strip()  # Read received data
-
-            # Check for Recommended Minimum Navigation Information 
-            if data.startswith("$GPRMC"):
-                fields = data.split(",")
-                status = fields[2]
-                if status == "A":  # Check if data is valid
+            line = uart.readline().decode('ascii', errors='ignore').strip()
+            if line.startswith("$GPRMC"):
+                fields = line.split(",")
+                if fields[2] == "A":
                     gps_data_received = True
-                    # Parse data
                     gps_last_data['time'] = fields[1]
-                    gps_last_data['latitude'] = convert_to_decimal(fields[3], fields[4])  # Convert to decimal
-                    gps_last_data['longitude'] = convert_to_decimal(fields[5], fields[6])  # Convert to decimal
-                    gps_last_data['speed'] = float(fields[7])
-                    gps_last_data['course'] = float(fields[8])
+                    gps_last_data['latitude'] = convert_to_decimal(fields[3], fields[4])
+                    gps_last_data['longitude'] = convert_to_decimal(fields[5], fields[6])
+                    gps_last_data['speed'] = float(fields[7]) if fields[7] else 0.0
+                    gps_last_data['course'] = float(fields[8]) if fields[8] else 0.0
                     gps_last_data['date'] = fields[9]
-        
+
         if not gps_data_received:
-            # If no GPS fix, use the previous values (zero or last known values)
-            gps_last_data = {key: 0.0 if key != 'time' and key != 'date' else '00:00:00' for key in gps_last_data}
+            gps_last_data = {key: 0.0 if key not in ('time', 'date') else '00:00:00' for key in gps_last_data}
 
-        # Print the sensor values as they are read
-        print(f"Time: {current_time:.6f}s")
-        print(f"H3LIS Accel - X: {x_cal:.3f} Y: {y_cal:.3f} Z: {z_cal:.3f} m/s^2")
-        print(f"MPU6050 Accel - X: {IMU_accel_x:.3f} Y: {IMU_accel_y:.3f} Z: {IMU_accel_z:.3f} m/s^2")
-        print(f"MPU6050 Gyro - X: {IMU_gyro_x:.3f} Y: {IMU_gyro_y:.3f} Z: {IMU_gyro_z:.3f}")
-        print(f"Pressure: {pressure:.3f} hPa Altitude: {altitude:.3f} meters Temperature: {temperature:.3f} °C")
-        print(f"GPS - Time: {gps_last_data['time']}, Latitude: {gps_last_data['latitude']}, Longitude: {gps_last_data['longitude']}, Speed: {gps_last_data['speed']} knots, Course: {gps_last_data['course']}°")
-
-        # Pack data for binary write
+        # Pack binary
         data_packet = struct.pack(
             "f 3f 3f 3f 3f f f f f",
-            current_time,       # Timestamp
-            x_cal, y_cal, z_cal,  # H3LIS331 Calibrated Acceleration
-            IMU_accel_x, IMU_accel_y, IMU_accel_z,  # MPU6050 Acceleration
-            IMU_gyro_x, IMU_gyro_y, IMU_gyro_z,  # MPU6050 Gyroscope
-            pressure, altitude, temperature,  # BMP390
-            gps_last_data['latitude'], gps_last_data['longitude'], gps_last_data['speed'], gps_last_data['course']  # GPS Data
+            current_time,
+            x_cal, y_cal, z_cal,
+            ax, ay, az,
+            gx, gy, gz,
+            pressure, altitude, temperature,
+            gps_last_data['latitude'], gps_last_data['longitude'],
+            gps_last_data['speed'], gps_last_data['course']
         )
 
-        # Write the packed data to the binary file
-        bin_file.write(data_packet)
+        packet_buffer.append(data_packet)
 
-        # Sleep for 20ms (50 Hz logging)
-        led.value = False 
-        time.sleep(0.05)
+        # Flush buffer
+        if len(packet_buffer) >= BUFFER_SIZE:
+            bin_file.write(b''.join(packet_buffer))
+            packet_buffer = []
+
+        # Print live status
+        print(f"Time: {current_time:.3f}s")
+        print(f"H3LIS Accel: X={x_cal:.2f} Y={y_cal:.2f} Z={z_cal:.2f}")
+        print(f"MPU6050 Accel: X={ax:.2f} Y={ay:.2f} Z={az:.2f}")
+        print(f"MPU6050 Gyro: X={gx:.2f} Y={gy:.2f} Z={gz:.2f}")
+        print(f"Pressure: {pressure:.2f} hPa, Altitude: {altitude:.2f} m, Temp: {temperature:.2f} °C")
+        print(f"GPS: Lat={gps_last_data['latitude']}, Lon={gps_last_data['longitude']}, "
+              f"Speed={gps_last_data['speed']} knots, Course={gps_last_data['course']}°")
+
+        # Timing control
+        elapsed = time.time() - loop_start
+        if elapsed < SAMPLE_INTERVAL:
+            time.sleep(SAMPLE_INTERVAL - elapsed)
