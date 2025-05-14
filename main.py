@@ -17,6 +17,14 @@ import os
 BUFFER_SIZE = 50
 TARGET_HZ = 50
 SAMPLE_INTERVAL = 1.0 / TARGET_HZ
+AIR_PRESSURE = 1013.25
+
+# Calculate Altitude
+def calculate_altitude(pressure, ground_pressure=AIR_PRESSURE):
+    """
+    Calculate altitude based on pressure and sea-level pressure using the barometric formula.
+    """
+    return 44330.0 * (1.0 - (pressure / ground_pressure) ** (1 / 5.255))
 
 # Initialize I2C
 i2c = busio.I2C(board.SCL, board.SDA)
@@ -110,10 +118,10 @@ with open("data.bin", "wb") as bin_file:
             led.value = True
             x_cal = y_cal = z_cal = 0.0
 
-        # Read BMP388
+        # Read BMP390
         try:
             pressure = bmp.pressure
-            altitude = bmp.altitude
+            altitude = calculate_altitude(pressure)
             temperature = bmp.temperature
         except:
             led.value = True
