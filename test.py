@@ -62,7 +62,7 @@ except Exception as e:
     sys.exit(1)
 
 # Video settings
-width, height, framerate = 1920, 1080, 60
+width, height, framerate = 1920, 1080, 30
 
 # Start video recording
 video_process = subprocess.Popen(
