@@ -15,9 +15,14 @@ import os
 
 # Constants
 BUFFER_SIZE = 50
-TARGET_HZ = 50
-SAMPLE_INTERVAL = 1.0 / TARGET_HZ
+TARGET_FREQ = 30
+SAMPLE_INTERVAL = 1.0 / TARGET_FREQ
 AIR_PRESSURE = 1013.25
+LAUNCH_THRESHOLD = 50.0  # m/s²
+
+# Flight milestone boolean flags
+on_launchpad = True
+launched = False
 
 # Calculate Altitude
 def calculate_altitude(pressure, ground_pressure=AIR_PRESSURE):
@@ -25,6 +30,14 @@ def calculate_altitude(pressure, ground_pressure=AIR_PRESSURE):
     Calculate altitude based on pressure and sea-level pressure using the barometric formula.
     """
     return 44330.0 * (1.0 - (pressure / ground_pressure) ** (1 / 5.255))
+
+# Flight milestone detection
+def flight_milestone(y_accel):
+    global on_launchpad, launched
+    if on_launchpad and not launched and y_accel > LAUNCH_THRESHOLD:
+        on_launchpad = False
+        launched = True
+        print("Launch detected! on_launchpad=False, launched=True")
 
 # Initialize I2C
 i2c = busio.I2C(board.SCL, board.SDA)
@@ -118,6 +131,9 @@ with open("data.bin", "wb") as bin_file:
             led.value = True
             x_cal = y_cal = z_cal = 0.0
 
+        # Call the flight milestone detection function
+        flight_milestone(y_cal)
+
         # Read BMP390
         try:
             pressure = bmp.pressure
@@ -180,6 +196,7 @@ with open("data.bin", "wb") as bin_file:
         print(f"Pressure: {pressure:.2f} hPa, Altitude: {altitude:.2f} m, Temp: {temperature:.2f} °C")
         print(f"GPS: Lat={gps_last_data['latitude']}, Lon={gps_last_data['longitude']}, "
               f"Speed={gps_last_data['speed']} knots, Course={gps_last_data['course']}°")
+        print(f"on_launchpad={on_launchpad}, launched={launched}")
 
         # Timing control
         elapsed = time.time() - loop_start
