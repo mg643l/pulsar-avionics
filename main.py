@@ -117,6 +117,44 @@ def camera_interrupt(sig, frame):
     print("Video successfully recorded in H.264 format!")
     sys.exit(0)
 
+# Handles post-landing operations
+def auto_shutdown():
+    """
+    Handles post-landing operations. Waits for 60 seconds to confirm landing,
+    then stops recording and saves the data. If landing is no longer true,
+    the timer resets.
+    """
+    global landed, landing_counter, packet_buffer
+
+    print("Landing detected! Entering post-landing procedure.")
+    landing_timer_start = time.time()
+
+    while True:
+        # Wait for 60 seconds while checking if landing is still true
+        if not landed:
+            print("Landing condition no longer true. Resetting timer.")
+            return  # Exit the function 
+
+        elapsed_time = time.time() - landing_timer_start
+        if elapsed_time >= 60:
+            print("Landing confirmed after 60 seconds. Proceeding with shutdown.")
+            break
+
+        time.sleep(1)  # Check every second 
+
+    # Stop writing to the file and flush the buffer
+    if packet_buffer:
+        with open("data.bin", "ab") as bin_file:  # Open in append mode to save remaining data
+            bin_file.write(b''.join(packet_buffer))
+        packet_buffer = []
+
+    # Stop video recording
+    camera_interrupt(signal.SIGINT, None)
+    print("Video recording stopped and data saved successfully.")
+    
+    # Turn off pi
+    os.system("sudo shutdown -h now")
+
 # Initialise I2C
 i2c = busio.I2C(board.SCL, board.SDA)
 
@@ -177,6 +215,7 @@ previous_time = time.time()
 packet_buffer = []
 start_time = time.time()
 
+# Main loop
 with open("data.bin", "wb") as bin_file:
     while True:
         loop_start = time.time()
@@ -218,6 +257,10 @@ with open("data.bin", "wb") as bin_file:
         # Update flight milestone
         flight_milestone(y_cal, altitude, previous_altitude)
 
+        # If landing is detected, call the handle_landing function
+        if landed:
+            auto_shutdown()
+
         # Read GPS if available
         gps_data_received = False
         if uart.in_waiting > 0:
@@ -256,7 +299,7 @@ with open("data.bin", "wb") as bin_file:
             bin_file.write(b''.join(packet_buffer))
             packet_buffer = []
 
-        # Print variables
+# Print variables
         print(f"Time: {program_time:.3f}s") 
         print(f"H3LIS Accel: X={x_cal:.2f} Y={y_cal:.2f} Z={z_cal:.2f}")
         print(f"MPU6050 Accel: X={ax:.2f} Y={ay:.2f} Z={az:.2f}")
