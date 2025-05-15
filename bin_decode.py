@@ -1,12 +1,23 @@
 import struct
 import csv
+import os
 
 # Define updated binary format
 binary_format = "f 3f 3f 3f 4f 4f f"
 data_size = struct.calcsize(binary_format)
 
+# Ask user for the filename
+bin_filename = input("Enter the .bin filename to decode (e.g., data_YYYYMMDD_HHMMSS.bin): ").strip()
+
+# Check if file exists
+if not os.path.isfile(bin_filename):
+    print(f"Error: File '{bin_filename}' not found.")
+    exit(1)
+
+csv_filename = bin_filename.replace('.bin', '.csv')
+
 # Open binary file and convert to CSV
-with open("data.bin", "rb") as bin_file, open("data.csv", "w", newline="") as csv_file:
+with open(bin_filename, "rb") as bin_file, open(csv_filename, "w", newline="") as csv_file:
     writer = csv.writer(csv_file)
 
     # Write header row to CSV, including GPS data fields
@@ -32,4 +43,4 @@ with open("data.bin", "rb") as bin_file, open("data.csv", "w", newline="") as cs
         # Write the unpacked data to the CSV file
         writer.writerow(unpacked_data)
 
-print("Data successfully converted to data.csv")
+print(f"Data successfully converted to {csv_filename}")
