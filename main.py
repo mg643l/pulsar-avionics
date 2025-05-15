@@ -23,7 +23,7 @@ BURNOUT_THRESHOLD = 10.0
 BURNOUT_SAMPLE_COUNT = 3  
 APOGEE_SAMPLE_COUNT = 5  
 LANDING_SAMPLE_COUNT = 10
-LANDING_THRESHOLD = 2.0  # Altitude change threshold in meters
+LANDING_THRESHOLD = 2.0  
 
 # Flight milestone boolean flags
 on_launchpad = True
