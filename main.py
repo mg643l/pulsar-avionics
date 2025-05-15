@@ -92,6 +92,24 @@ def flight_milestone(y_accel, current_altitude, previous_altitude):
         else:
             landing_counter = 0
 
+# Determine phase number
+# -1: Unknown, 0: on launchpad, 1: launched, 2: motor burnout, 3: apogee, 4: landing        
+def flight_phase():
+    if on_launchpad:
+        current_phase = 0
+    elif launched and not motor_burnout:
+        current_phase = 1
+    elif motor_burnout and not apogee_detected:
+      current_phase = 2
+    elif apogee_detected and not landed:
+        current_phase = 3
+    elif landed:
+        current_phase = 4
+    else:
+        current_phase = -1  # Unknown phase
+
+    return current_phase
+
 # Load calibration offsets from a file
 def load_offsets(filename="offsets.bin"):
     try:
@@ -211,6 +229,8 @@ gps_last_data = {
 previous_altitude = 0.0
 previous_time = time.time()
 
+phase = -1  # Unknown phase
+
 # Open binary file for logging
 packet_buffer = []
 start_time = time.time()
@@ -257,6 +277,8 @@ with open("data.bin", "wb") as bin_file:
         # Update flight milestone
         flight_milestone(y_cal, altitude, previous_altitude)
 
+        phase = flight_phase()
+
         # If landing is detected, call the handle_landing function
         if landed:
             auto_shutdown()
@@ -281,7 +303,7 @@ with open("data.bin", "wb") as bin_file:
 
         # Pack binary
         data_packet = struct.pack(
-            "f 3f 3f 3f 3f f f f f f",
+            "f 3f 3f 3f 4f 4f f",
             program_time, 
             x_cal, y_cal, z_cal,
             ax, ay, az,
@@ -289,7 +311,8 @@ with open("data.bin", "wb") as bin_file:
             pressure, altitude, temperature,
             vertical_speed,
             gps_last_data['latitude'], gps_last_data['longitude'],
-            gps_last_data['speed'], gps_last_data['course']
+            gps_last_data['speed'], gps_last_data['course'],
+            phase
         )
 
         packet_buffer.append(data_packet)
@@ -308,6 +331,7 @@ with open("data.bin", "wb") as bin_file:
         print(f"Vertical Speed: {vertical_speed:.2f} m/s")
         print(f"GPS: Lat={gps_last_data['latitude']}, Lon={gps_last_data['longitude']}, "
               f"Speed={gps_last_data['speed']} knots, Course={gps_last_data['course']}°")
+        print(f"Phase: {phase}")
 
         # Timing control
         elapsed = time.time() - loop_start

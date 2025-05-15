@@ -2,7 +2,7 @@ import struct
 import csv
 
 # Define updated binary format
-binary_format = "f 3f 3f 3f 3f f f f f f"
+binary_format = "f 3f 3f 3f 4f 4f f"
 data_size = struct.calcsize(binary_format)
 
 # Open binary file and convert to CSV
@@ -16,7 +16,8 @@ with open("data.bin", "rb") as bin_file, open("data.csv", "w", newline="") as cs
         "MPU6050_Accel_X", "MPU6050_Accel_Y", "MPU6050_Accel_Z",
         "MPU6050_Gyro_X", "MPU6050_Gyro_Y", "MPU6050_Gyro_Z",
         "Pressure", "Altitude", "Temperature", "Vertical_Speed",
-        "GPS_Latitude", "GPS_Longitude", "GPS_Speed", "GPS_Course"
+        "GPS_Latitude", "GPS_Longitude", "GPS_Speed", "GPS_Course",
+        "Phase"
     ])
 
     # Read binary data and unpack into CSV format
