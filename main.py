@@ -31,6 +31,19 @@ def calculate_altitude(pressure, ground_pressure=AIR_PRESSURE):
     """
     return 44330.0 * (1.0 - (pressure / ground_pressure) ** (1 / 5.255))
 
+# Calculate Vertical Speed
+def calculate_vertical_speed(current_altitude, previous_altitude, current_time, previous_time):
+    """
+    Calculate vertical speed based on the change in altitude and time.
+    Returns the vertical speed.
+    """
+    delta_time = current_time - previous_time
+    if delta_time > 0:  # Avoid division by zero
+        vertical_speed = (current_altitude - previous_altitude) / delta_time
+    else:
+        vertical_speed = 0.0
+    return vertical_speed
+
 # Flight milestone detection
 def flight_milestone(y_accel):
     global on_launchpad, launched
@@ -39,7 +52,7 @@ def flight_milestone(y_accel):
         launched = True
         print("Launch detected! on_launchpad=False, launched=True")
 
-# Initialize I2C
+# Initialise I2C
 i2c = busio.I2C(board.SCL, board.SDA)
 
 # Setup status LED
@@ -47,7 +60,7 @@ led = digitalio.DigitalInOut(board.D27)
 led.direction = digitalio.Direction.OUTPUT
 led.value = False
 
-# Initialize sensors
+# Initialise sensors
 bmp = adafruit_bmp3xx.BMP3XX_I2C(i2c)
 mpu = adafruit_mpu6050.MPU6050(i2c)
 sensor = adafruit_lis331.H3LIS331(i2c)
@@ -114,6 +127,10 @@ gps_last_data = {
     'time': '00:00:00', 'date': '00/00/00'
 }
 
+# For vertical speed calculation
+previous_altitude = 0.0
+previous_time = time.time()
+
 # Open binary file for logging
 packet_buffer = []
 start_time = time.time()
@@ -121,7 +138,10 @@ start_time = time.time()
 with open("data.bin", "wb") as bin_file:
     while True:
         loop_start = time.time()
-        current_time = time.time() - start_time
+        program_time = time.time() - start_time 
+
+        # Calculate current absolute time
+        current_time = time.time()  
 
         # Read H3LIS accelerometer
         try:
@@ -131,7 +151,7 @@ with open("data.bin", "wb") as bin_file:
             led.value = True
             x_cal = y_cal = z_cal = 0.0
 
-        # Call the flight milestone detection function
+        # Update flight milestone
         flight_milestone(y_cal)
 
         # Read BMP390
@@ -139,9 +159,14 @@ with open("data.bin", "wb") as bin_file:
             pressure = bmp.pressure
             altitude = calculate_altitude(pressure)
             temperature = bmp.temperature
+
+            vertical_speed = calculate_vertical_speed(altitude, previous_altitude, current_time, previous_time)
+
+            previous_altitude = altitude
+            previous_time = current_time
         except:
             led.value = True
-            pressure = altitude = temperature = 0.0
+            pressure = altitude = temperature = vertical_speed = 0.0
 
         # Read MPU6050
         try:
@@ -171,12 +196,13 @@ with open("data.bin", "wb") as bin_file:
 
         # Pack binary
         data_packet = struct.pack(
-            "f 3f 3f 3f 3f f f f f",
-            current_time,
+            "f 3f 3f 3f 3f f f f f f",
+            program_time, 
             x_cal, y_cal, z_cal,
             ax, ay, az,
             gx, gy, gz,
             pressure, altitude, temperature,
+            vertical_speed,
             gps_last_data['latitude'], gps_last_data['longitude'],
             gps_last_data['speed'], gps_last_data['course']
         )
@@ -188,12 +214,13 @@ with open("data.bin", "wb") as bin_file:
             bin_file.write(b''.join(packet_buffer))
             packet_buffer = []
 
-        # Print live status
-        print(f"Time: {current_time:.3f}s")
+        # Print variables
+        print(f"Time: {program_time:.3f}s") 
         print(f"H3LIS Accel: X={x_cal:.2f} Y={y_cal:.2f} Z={z_cal:.2f}")
         print(f"MPU6050 Accel: X={ax:.2f} Y={ay:.2f} Z={az:.2f}")
         print(f"MPU6050 Gyro: X={gx:.2f} Y={gy:.2f} Z={gz:.2f}")
         print(f"Pressure: {pressure:.2f} hPa, Altitude: {altitude:.2f} m, Temp: {temperature:.2f} °C")
+        print(f"Vertical Speed: {vertical_speed:.2f} m/s")
         print(f"GPS: Lat={gps_last_data['latitude']}, Lon={gps_last_data['longitude']}, "
               f"Speed={gps_last_data['speed']} knots, Course={gps_last_data['course']}°")
         print(f"on_launchpad={on_launchpad}, launched={launched}")
