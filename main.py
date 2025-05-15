@@ -137,11 +137,6 @@ def camera_interrupt(sig, frame):
 
 # Handles post-landing operations
 def auto_shutdown():
-    """
-    Handles post-landing operations. Waits for 60 seconds to confirm landing,
-    then stops recording and saves the data. If landing is no longer true,
-    the timer resets.
-    """
     global landed, landing_counter, packet_buffer
 
     print("Landing detected! Entering post-landing procedure.")
