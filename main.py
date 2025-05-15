@@ -5,7 +5,7 @@ import sys
 import board # type: ignore
 import struct
 import pickle
-import serial
+import serial # type: ignore
 import adafruit_bmp3xx # type: ignore
 import adafruit_lis331 # type: ignore
 import adafruit_mpu6050 # type: ignore
@@ -20,7 +20,7 @@ TARGET_FREQ = 30
 SAMPLE_INTERVAL = 1.0 / TARGET_FREQ
 AIR_PRESSURE = 1013.25
 LAUNCH_THRESHOLD = 50.0  
-BURNOUT_THRESHOLD = 10.0  
+BURNOUT_THRESHOLD = 20.0  
 BURNOUT_SAMPLE_COUNT = 3  
 APOGEE_SAMPLE_COUNT = 5  
 LANDING_SAMPLE_COUNT = 10
@@ -259,8 +259,6 @@ with open(data_filename, "wb") as bin_file:
 
             vertical_speed = calculate_vertical_speed(altitude, previous_altitude, current_time, previous_time)
 
-            previous_altitude = altitude
-            previous_time = current_time
         except:
             led.value = True
             pressure = altitude = temperature = vertical_speed = 0.0
@@ -278,6 +276,9 @@ with open(data_filename, "wb") as bin_file:
 
         # Update phase
         phase = flight_phase()
+
+        previous_altitude = altitude
+        previous_time = current_time
 
         # If landing is detected, call the handle_landing function
         if landed:
