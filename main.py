@@ -2,15 +2,15 @@ import subprocess
 import time
 import signal
 import sys
-import board
+import board # type: ignore
 import struct
 import pickle
 import serial
-import adafruit_bmp3xx
-import adafruit_lis331
-import adafruit_mpu6050
-import busio
-import digitalio
+import adafruit_bmp3xx # type: ignore
+import adafruit_lis331 # type: ignore
+import adafruit_mpu6050 # type: ignore
+import busio # type: ignore
+import digitalio # type: ignore
 import os
 
 # Constants
@@ -18,19 +18,22 @@ BUFFER_SIZE = 50
 TARGET_FREQ = 30
 SAMPLE_INTERVAL = 1.0 / TARGET_FREQ
 AIR_PRESSURE = 1013.25
-LAUNCH_THRESHOLD = 50.0  # m/s²
-BURNOUT_THRESHOLD = 10.0  # m/s² (example threshold for detecting burnout)
-BURNOUT_SAMPLE_COUNT = 3  # Number of consecutive samples required
+LAUNCH_THRESHOLD = 50.0  
+BURNOUT_THRESHOLD = 10.0  
+BURNOUT_SAMPLE_COUNT = 3  
+APOGEE_SAMPLE_COUNT = 5  
 
 # Flight milestone boolean flags
 on_launchpad = True
 launched = False
 motor_burnout = False
+apogee_detected = False
 
-# Counter for consecutive samples below the burnout threshold
+# Counters for consecutive samples 
 burnout_counter = 0
+apogee_counter = 0
 
-# Calculate altitude based on pressure and sea-level pressure using the barometric formula.
+# Calculate altitude from pressure using the barometric formula
 def calculate_altitude(pressure, ground_pressure=AIR_PRESSURE):
     return 44330.0 * (1.0 - (pressure / ground_pressure) ** (1 / 5.255))
 
@@ -43,9 +46,9 @@ def calculate_vertical_speed(current_altitude, previous_altitude, current_time, 
         vertical_speed = 0.0
     return vertical_speed
 
-# Detect flight milestones based on acceleration.
-def flight_milestone(y_accel):
-    global on_launchpad, launched, motor_burnout, burnout_counter
+# Detect flight milestones based on acceleration and altitude
+def flight_milestone(y_accel, current_altitude, previous_altitude):
+    global on_launchpad, launched, motor_burnout, burnout_counter, apogee_detected, apogee_counter
 
     # Detect launch
     if on_launchpad and not launched and y_accel > LAUNCH_THRESHOLD:
@@ -55,15 +58,27 @@ def flight_milestone(y_accel):
 
     # Detect motor burnout
     if launched and not motor_burnout:
+        # Check if the acceleration is below the threshold for a certain number of samples
         if y_accel < BURNOUT_THRESHOLD:
-            burnout_counter += 1
+            burnout_counter += 1 # Increment counter if condition is met
             if burnout_counter >= BURNOUT_SAMPLE_COUNT:
                 motor_burnout = True
                 print("Motor burnout detected! motor_burnout=True")
         else:
             burnout_counter = 0  # Reset counter if condition is not met
 
-# Load calibration offsets from a file.
+    # Detect apogee
+    if launched and not apogee_detected:
+        if current_altitude < previous_altitude:
+            # Check if the rocket is descending for a certain number of samples
+            apogee_counter += 1 # Increment counter if condition is met
+            if apogee_counter >= APOGEE_SAMPLE_COUNT:
+                apogee_detected = True
+                print("Apogee detected! apogee_detected=True")
+        else:
+            apogee_counter = 0  # Reset counter if condition is not met
+
+# Load calibration offsets from a file
 def load_offsets(filename="offsets.bin"):
     try:
         with open(filename, "rb") as f:
@@ -73,14 +88,14 @@ def load_offsets(filename="offsets.bin"):
         print("Error: Calibration file not found. Run calibration first.")
         sys.exit(1)
 
-# Convert GPS coordinates from degrees and minutes to decimal format.
+# Convert GPS coordinates from degrees and minutes to decimal format
 def convert_to_decimal(degrees_minutes, direction):
     degrees = int(degrees_minutes[:len(degrees_minutes) - 7])
     minutes = float(degrees_minutes[len(degrees_minutes) - 7:])
     decimal = degrees + (minutes / 60)
     return -decimal if direction in ["S", "W"] else decimal
 
-# Handle Ctrl+C to stop video recording.
+# Handle Ctrl+C to stop video recording
 def camera_interrupt(sig, frame):
     print("\nInterrupt received, stopping recording...")
     video_process.terminate()
@@ -164,9 +179,6 @@ with open("data.bin", "wb") as bin_file:
             led.value = True
             x_cal = y_cal = z_cal = 0.0
 
-        # Update flight milestone
-        flight_milestone(y_cal)
-
         # Read BMP390
         try:
             pressure = bmp.pressure
@@ -188,6 +200,9 @@ with open("data.bin", "wb") as bin_file:
         except:
             led.value = True
             ax = ay = az = gx = gy = gz = 0.0
+
+        # Update flight milestone
+        flight_milestone(y_cal, altitude, previous_altitude)
 
         # Read GPS if available
         gps_data_received = False
