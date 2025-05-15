@@ -19,10 +19,16 @@ TARGET_FREQ = 30
 SAMPLE_INTERVAL = 1.0 / TARGET_FREQ
 AIR_PRESSURE = 1013.25
 LAUNCH_THRESHOLD = 50.0  # m/s²
+BURNOUT_THRESHOLD = 10.0  # m/s² (example threshold for detecting burnout)
+BURNOUT_SAMPLE_COUNT = 3  # Number of consecutive samples required
 
 # Flight milestone boolean flags
 on_launchpad = True
 launched = False
+motor_burnout = False
+
+# Counter for consecutive samples below the burnout threshold
+burnout_counter = 0
 
 # Calculate altitude based on pressure and sea-level pressure using the barometric formula.
 def calculate_altitude(pressure, ground_pressure=AIR_PRESSURE):
@@ -39,11 +45,23 @@ def calculate_vertical_speed(current_altitude, previous_altitude, current_time, 
 
 # Detect flight milestones based on acceleration.
 def flight_milestone(y_accel):
-    global on_launchpad, launched
+    global on_launchpad, launched, motor_burnout, burnout_counter
+
+    # Detect launch
     if on_launchpad and not launched and y_accel > LAUNCH_THRESHOLD:
         on_launchpad = False
         launched = True
         print("Launch detected! on_launchpad=False, launched=True")
+
+    # Detect motor burnout
+    if launched and not motor_burnout:
+        if y_accel < BURNOUT_THRESHOLD:
+            burnout_counter += 1
+            if burnout_counter >= BURNOUT_SAMPLE_COUNT:
+                motor_burnout = True
+                print("Motor burnout detected! motor_burnout=True")
+        else:
+            burnout_counter = 0  # Reset counter if condition is not met
 
 # Load calibration offsets from a file.
 def load_offsets(filename="offsets.bin"):
@@ -218,7 +236,6 @@ with open("data.bin", "wb") as bin_file:
         print(f"Vertical Speed: {vertical_speed:.2f} m/s")
         print(f"GPS: Lat={gps_last_data['latitude']}, Lon={gps_last_data['longitude']}, "
               f"Speed={gps_last_data['speed']} knots, Course={gps_last_data['course']}°")
-        print(f"on_launchpad={on_launchpad}, launched={launched}")
 
         # Timing control
         elapsed = time.time() - loop_start
