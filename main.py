@@ -24,19 +24,12 @@ LAUNCH_THRESHOLD = 50.0  # m/s²
 on_launchpad = True
 launched = False
 
-# Calculate Altitude
+# Calculate altitude based on pressure and sea-level pressure using the barometric formula.
 def calculate_altitude(pressure, ground_pressure=AIR_PRESSURE):
-    """
-    Calculate altitude based on pressure and sea-level pressure using the barometric formula.
-    """
     return 44330.0 * (1.0 - (pressure / ground_pressure) ** (1 / 5.255))
 
-# Calculate Vertical Speed
+# Calculate vertical speed based on the change in altitude and time.
 def calculate_vertical_speed(current_altitude, previous_altitude, current_time, previous_time):
-    """
-    Calculate vertical speed based on the change in altitude and time.
-    Returns the vertical speed.
-    """
     delta_time = current_time - previous_time
     if delta_time > 0:  # Avoid division by zero
         vertical_speed = (current_altitude - previous_altitude) / delta_time
@@ -44,13 +37,38 @@ def calculate_vertical_speed(current_altitude, previous_altitude, current_time, 
         vertical_speed = 0.0
     return vertical_speed
 
-# Flight milestone detection
+# Detect flight milestones based on acceleration.
 def flight_milestone(y_accel):
     global on_launchpad, launched
     if on_launchpad and not launched and y_accel > LAUNCH_THRESHOLD:
         on_launchpad = False
         launched = True
         print("Launch detected! on_launchpad=False, launched=True")
+
+# Load calibration offsets from a file.
+def load_offsets(filename="offsets.bin"):
+    try:
+        with open(filename, "rb") as f:
+            return pickle.load(f)
+    except FileNotFoundError:
+        led.value = True
+        print("Error: Calibration file not found. Run calibration first.")
+        sys.exit(1)
+
+# Convert GPS coordinates from degrees and minutes to decimal format.
+def convert_to_decimal(degrees_minutes, direction):
+    degrees = int(degrees_minutes[:len(degrees_minutes) - 7])
+    minutes = float(degrees_minutes[len(degrees_minutes) - 7:])
+    decimal = degrees + (minutes / 60)
+    return -decimal if direction in ["S", "W"] else decimal
+
+# Handle Ctrl+C to stop video recording.
+def camera_interrupt(sig, frame):
+    print("\nInterrupt received, stopping recording...")
+    video_process.terminate()
+    video_process.wait()
+    print("Video successfully recorded in H.264 format!")
+    sys.exit(0)
 
 # Initialise I2C
 i2c = busio.I2C(board.SCL, board.SDA)
@@ -67,24 +85,8 @@ sensor = adafruit_lis331.H3LIS331(i2c)
 sensor.range = adafruit_lis331.H3LIS331Range.RANGE_100G
 
 # Load calibration
-def load_offsets(filename="offsets.bin"):
-    try:
-        with open(filename, "rb") as f:
-            return pickle.load(f)
-    except FileNotFoundError:
-        led.value = True
-        print("Error: Calibration file not found. Run calibration first.")
-        sys.exit(1)
-
 x_offset, y_offset, z_offset = load_offsets()
 print(f"Loaded Offsets: X={x_offset}, Y={y_offset}, Z={z_offset}")
-
-# Convert GPS data
-def convert_to_decimal(degrees_minutes, direction):
-    degrees = int(degrees_minutes[:len(degrees_minutes) - 7])
-    minutes = float(degrees_minutes[len(degrees_minutes) - 7:])
-    decimal = degrees + (minutes / 60)
-    return -decimal if direction in ["S", "W"] else decimal
 
 # Open GPS serial
 try:
@@ -111,13 +113,6 @@ video_process = subprocess.Popen(
 print("Recording video... Press Ctrl+C to stop.")
 
 # Handle Ctrl+C
-def camera_interrupt(sig, frame):
-    print("\nInterrupt received, stopping recording...")
-    video_process.terminate()
-    video_process.wait()
-    print("Video successfully recorded in H.264 format!")
-    sys.exit(0)
-
 signal.signal(signal.SIGINT, camera_interrupt)
 
 # Prepare GPS default
