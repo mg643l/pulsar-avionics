@@ -299,7 +299,7 @@ with open("data.bin", "wb") as bin_file:
             bin_file.write(b''.join(packet_buffer))
             packet_buffer = []
 
-# Print variables
+        # Print variables
         print(f"Time: {program_time:.3f}s") 
         print(f"H3LIS Accel: X={x_cal:.2f} Y={y_cal:.2f} Z={z_cal:.2f}")
         print(f"MPU6050 Accel: X={ax:.2f} Y={ay:.2f} Z={az:.2f}")
