@@ -22,16 +22,20 @@ LAUNCH_THRESHOLD = 50.0
 BURNOUT_THRESHOLD = 10.0  
 BURNOUT_SAMPLE_COUNT = 3  
 APOGEE_SAMPLE_COUNT = 5  
+LANDING_SAMPLE_COUNT = 10
+LANDING_THRESHOLD = 2.0  # Altitude change threshold in meters
 
 # Flight milestone boolean flags
 on_launchpad = True
 launched = False
 motor_burnout = False
 apogee_detected = False
+landed = False
 
 # Counters for consecutive samples 
 burnout_counter = 0
 apogee_counter = 0
+landing_counter = 0
 
 # Calculate altitude from pressure using the barometric formula
 def calculate_altitude(pressure, ground_pressure=AIR_PRESSURE):
@@ -48,7 +52,7 @@ def calculate_vertical_speed(current_altitude, previous_altitude, current_time, 
 
 # Detect flight milestones based on acceleration and altitude
 def flight_milestone(y_accel, current_altitude, previous_altitude):
-    global on_launchpad, launched, motor_burnout, burnout_counter, apogee_detected, apogee_counter
+    global on_launchpad, launched, motor_burnout, burnout_counter, apogee_detected, apogee_counter, landed, landing_counter
 
     # Detect launch
     if on_launchpad and not launched and y_accel > LAUNCH_THRESHOLD:
@@ -77,6 +81,16 @@ def flight_milestone(y_accel, current_altitude, previous_altitude):
                 print("Apogee detected! apogee_detected=True")
         else:
             apogee_counter = 0  # Reset counter if condition is not met
+
+    # Detect landing
+    if launched and apogee_detected and not landed:
+        if abs(current_altitude - previous_altitude) <= LANDING_THRESHOLD:
+            landing_counter += 1
+            if landing_counter >= LANDING_SAMPLE_COUNT:
+                landed = True
+                print("Landing detected! landed=True")
+        else:
+            landing_counter = 0
 
 # Load calibration offsets from a file
 def load_offsets(filename="offsets.bin"):
