@@ -12,6 +12,7 @@ import adafruit_mpu6050 # type: ignore
 import busio # type: ignore
 import digitalio # type: ignore
 import os
+from datetime import datetime
 
 # Constants
 BUFFER_SIZE = 50
@@ -157,7 +158,7 @@ def auto_shutdown():
 
     # Stop writing to the file and flush the buffer
     if packet_buffer:
-        with open("data.bin", "ab") as bin_file:  # Open in append mode to save remaining data
+        with open(data_filename, "ab") as bin_file:  
             bin_file.write(b''.join(packet_buffer))
         packet_buffer = []
 
@@ -230,8 +231,11 @@ phase = -1  # Unknown phase
 packet_buffer = []
 start_time = time.time()
 
+# Generate unique filename for each run
+data_filename = f"data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.bin"
+
 # Main loop
-with open("data.bin", "wb") as bin_file:
+with open(data_filename, "wb") as bin_file:
     while True:
         loop_start = time.time()
         program_time = time.time() - start_time 
@@ -272,6 +276,7 @@ with open("data.bin", "wb") as bin_file:
         # Update flight milestone
         flight_milestone(y_cal, altitude, previous_altitude)
 
+        # Update phase
         phase = flight_phase()
 
         # If landing is detected, call the handle_landing function
