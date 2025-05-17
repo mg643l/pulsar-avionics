@@ -2,29 +2,30 @@ import subprocess
 import time
 import signal
 import sys
-import board # type: ignore
+import board  # type: ignore
 import struct
 import pickle
-import serial # type: ignore
-import adafruit_bmp3xx # type: ignore
-import adafruit_lis331 # type: ignore
-import adafruit_mpu6050 # type: ignore
-import busio # type: ignore
-import digitalio # type: ignore
+import serial  # type: ignore
+import adafruit_bmp3xx  # type: ignore
+import adafruit_lis331  # type: ignore
+import adafruit_mpu6050  # type: ignore
+import busio  # type: ignore
+import digitalio  # type: ignore
 import os
 from datetime import datetime
+import psutil
 
 # Constants
 BUFFER_SIZE = 50
 TARGET_FREQ = 30
 SAMPLE_INTERVAL = 1.0 / TARGET_FREQ
 AIR_PRESSURE = 1013.25
-LAUNCH_THRESHOLD = 50.0  
-BURNOUT_THRESHOLD = 20.0  
-BURNOUT_SAMPLE_COUNT = 3  
-APOGEE_SAMPLE_COUNT = 5  
+LAUNCH_THRESHOLD = 50.0
+BURNOUT_THRESHOLD = 20.0
+BURNOUT_SAMPLE_COUNT = 3
+APOGEE_SAMPLE_COUNT = 5
 LANDING_SAMPLE_COUNT = 10
-LANDING_THRESHOLD = 2.0  
+LANDING_THRESHOLD = 2.0
 
 # Flight milestone boolean flags
 on_launchpad = True
@@ -33,7 +34,7 @@ motor_burnout = False
 apogee_detected = False
 landed = False
 
-# Counters for consecutive samples 
+# Counters for consecutive samples
 burnout_counter = 0
 apogee_counter = 0
 landing_counter = 0
@@ -65,7 +66,7 @@ def flight_milestone(y_accel, current_altitude, previous_altitude):
     if launched and not motor_burnout:
         # Check if the acceleration is below the threshold for a certain number of samples
         if y_accel < BURNOUT_THRESHOLD:
-            burnout_counter += 1 # Increment counter if condition is met
+            burnout_counter += 1  # Increment counter if condition is met
             if burnout_counter >= BURNOUT_SAMPLE_COUNT:
                 motor_burnout = True
                 print("Motor burnout detected! motor_burnout=True")
@@ -76,7 +77,7 @@ def flight_milestone(y_accel, current_altitude, previous_altitude):
     if launched and not apogee_detected:
         if current_altitude < previous_altitude:
             # Check if the rocket is descending for a certain number of samples
-            apogee_counter += 1 # Increment counter if condition is met
+            apogee_counter += 1  # Increment counter if condition is met
             if apogee_counter >= APOGEE_SAMPLE_COUNT:
                 apogee_detected = True
                 print("Apogee detected! apogee_detected=True")
@@ -94,14 +95,14 @@ def flight_milestone(y_accel, current_altitude, previous_altitude):
             landing_counter = 0
 
 # Determine phase number
-# -1: Unknown, 0: on launchpad, 1: launched, 2: motor burnout, 3: apogee, 4: landing        
+# -1: Unknown, 0: on launchpad, 1: launched, 2: motor burnout, 3: apogee, 4: landing
 def flight_phase():
     if on_launchpad:
         current_phase = 0
     elif launched and not motor_burnout:
         current_phase = 1
     elif motor_burnout and not apogee_detected:
-      current_phase = 2
+        current_phase = 2
     elif apogee_detected and not landed:
         current_phase = 3
     elif landed:
@@ -147,25 +148,25 @@ def auto_shutdown():
         # Wait for 60 seconds while checking if landing is still true
         if not landed:
             print("Landing condition no longer true. Resetting timer.")
-            return  # Exit the function 
+            return  # Exit the function
 
         elapsed_time = time.time() - landing_timer_start
         if elapsed_time >= 60:
             print("Landing confirmed after 60 seconds. Proceeding with shutdown.")
             break
 
-        time.sleep(1)  # Check every second 
+        time.sleep(1)  # Check every second
 
     # Stop writing to the file and flush the buffer
     if packet_buffer:
-        with open(data_filename, "ab") as bin_file:  
+        with open("data.bin", "ab") as bin_file:
             bin_file.write(b''.join(packet_buffer))
         packet_buffer = []
 
     # Stop video recording
     camera_interrupt(signal.SIGINT, None)
     print("Video recording stopped and data saved successfully.")
-    
+
     # Turn off pi
     os.system("sudo shutdown -h now")
 
@@ -235,13 +236,13 @@ start_time = time.time()
 data_filename = f"data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.bin"
 
 # Main loop
-with open(data_filename, "wb") as bin_file:
+with open("data.bin", "wb") as bin_file:
     while True:
         loop_start = time.time()
-        program_time = time.time() - start_time 
+        program_time = time.time() - start_time
 
         # Calculate current absolute time
-        current_time = time.time()  
+        current_time = time.time()
 
         # Read H3LIS accelerometer
         try:
@@ -305,7 +306,7 @@ with open(data_filename, "wb") as bin_file:
         # Pack binary
         data_packet = struct.pack(
             "f 3f 3f 3f 4f 4f f",
-            program_time, 
+            program_time,
             x_cal, y_cal, z_cal,
             ax, ay, az,
             gx, gy, gz,
@@ -324,7 +325,7 @@ with open(data_filename, "wb") as bin_file:
             packet_buffer = []
 
         # Print variables
-        print(f"Time: {program_time:.3f}s") 
+        print(f"Time: {program_time:.3f}s")
         print(f"H3LIS Accel: X={x_cal:.2f} Y={y_cal:.2f} Z={z_cal:.2f}")
         print(f"MPU6050 Accel: X={ax:.2f} Y={ay:.2f} Z={az:.2f}")
         print(f"MPU6050 Gyro: X={gx:.2f} Y={gy:.2f} Z={gz:.2f}")
@@ -333,6 +334,21 @@ with open(data_filename, "wb") as bin_file:
         print(f"GPS: Lat={gps_last_data['latitude']}, Lon={gps_last_data['longitude']}, "
               f"Speed={gps_last_data['speed']} knots, Course={gps_last_data['course']}°")
         print(f"Phase: {phase}")
+
+        try:
+            # CPU/Memory/Disk Usage
+            with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
+                cpu_temp = int(f.read()) / 1000.0
+            cpu_usage = psutil.cpu_percent(interval=None)
+            memory = psutil.virtual_memory()
+            memory_usage = memory.percent
+            disk = psutil.disk_usage("/")
+            disk_usage = disk.percent
+
+            print(f"CPU Temp: {cpu_temp:.1f}°C | CPU Usage: {cpu_usage:.1f}% | "
+                  f"Memory Usage: {memory_usage:.1f}% | Disk Usage: {disk_usage:.1f}%")
+        except Exception as e:
+            pass
 
         # Timing control
         elapsed = time.time() - loop_start
