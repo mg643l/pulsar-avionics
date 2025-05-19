@@ -39,6 +39,41 @@ burnout_counter = 0
 apogee_counter = 0
 landing_counter = 0
 
+# Welcome Screen
+pulsarString = """
+  _____  _    _ _       _____         _____  
+ |  __ \| |  | | |     / ____|  /\   |  __ \ 
+ | |__) | |  | | |    | (___   /  \  | |__) |
+ |  ___/| |  | | |     \___ \ / /\ \ |  _  / 
+ | |    | |__| | |____ ____) / ____ \| | \ \ 
+ |_|     \____/|______|_____/_/    \_\_|  \_\
+                                             
+"""
+
+lifts = """
+  _      _____ ______ _______ _____  __      ____   ___  
+ | |    |_   _|  ____|__   __/ ____| \ \    / /_ | |__ \ 
+ | |      | | | |__     | | | (___    \ \  / / | |    ) |
+ | |      | | |  __|    | |  \___ \    \ \/ /  | |   / / 
+ | |____ _| |_| |       | |  ____) |    \  /   | |_ / /_ 
+ |______|_____|_|       |_| |_____/      \/    |_(_)____|
+                                                         
+
+
+  ______ _ _       _     _      _____                            _            
+ |  ____| (_)     | |   | |    / ____|                          | |           
+ | |__  | |_  __ _| |__ | |_  | |     ___  _ __ ___  _ __  _   _| |_ ___ _ __ 
+ |  __| | | |/ _` | '_ \| __| | |    / _ \| '_ ` _ \| '_ \| | | | __/ _ \ '__|
+ | |    | | | (_| | | | | |_  | |___| (_) | | | | | | |_) | |_| | ||  __/ |   
+ |_|    |_|_|\__, |_| |_|\__|  \_____\___/|_| |_| |_| .__/ \__,_|\__\___|_|   
+              __/ |                                 | |                       
+             |___/                                  |_|                       
+
+                                                         
+"""
+print(pulsarString)
+print(lifts)
+
 # Calculate altitude from pressure using the barometric formula
 def calculate_altitude(pressure, ground_pressure=AIR_PRESSURE):
     return 44330.0 * (1.0 - (pressure / ground_pressure) ** (1 / 5.255))
@@ -236,7 +271,7 @@ start_time = time.time()
 data_filename = f"data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.bin"
 
 # Main loop
-with open("data.bin", "wb") as bin_file:
+with open(data_filename, "wb") as bin_file:
     while True:
         loop_start = time.time()
         program_time = time.time() - start_time
@@ -303,18 +338,34 @@ with open("data.bin", "wb") as bin_file:
         if not gps_data_received:
             gps_last_data = {key: 0.0 if key not in ('time', 'date') else '00:00:00' for key in gps_last_data}
 
-        # Pack binary
+        # Get system metrics
+        try:
+            # CPU/Memory/Disk Usage
+            with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
+                cpu_temp = int(f.read()) / 1000.0
+            cpu_usage = psutil.cpu_percent(interval=None)
+            memory = psutil.virtual_memory()
+            memory_usage = memory.percent
+            disk = psutil.disk_usage("/")
+            disk_usage = disk.percent
+        except Exception as e:
+            # Set default values if there's an error
+            cpu_temp = cpu_usage = memory_usage = disk_usage = 0.0
+
+        # Pack binary - Updated to include system metrics
+        # We changed the format string to add 4 more float values (4f) at the end
         data_packet = struct.pack(
-            "f 3f 3f 3f 4f 4f f",
+            "f 3f 3f 3f 4f 4f f 4f",  # Added 4f for the system metrics
             program_time,
             x_cal, y_cal, z_cal,
-            ax, ay, az,
+            ax, ay, az, 
             gx, gy, gz,
             pressure, altitude, temperature,
             vertical_speed,
             gps_last_data['latitude'], gps_last_data['longitude'],
             gps_last_data['speed'], gps_last_data['course'],
-            phase
+            phase,
+            cpu_temp, cpu_usage, memory_usage, disk_usage  # Added system metrics
         )
 
         packet_buffer.append(data_packet)
@@ -334,21 +385,8 @@ with open("data.bin", "wb") as bin_file:
         print(f"GPS: Lat={gps_last_data['latitude']}, Lon={gps_last_data['longitude']}, "
               f"Speed={gps_last_data['speed']} knots, Course={gps_last_data['course']}°")
         print(f"Phase: {phase}")
-
-        try:
-            # CPU/Memory/Disk Usage
-            with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
-                cpu_temp = int(f.read()) / 1000.0
-            cpu_usage = psutil.cpu_percent(interval=None)
-            memory = psutil.virtual_memory()
-            memory_usage = memory.percent
-            disk = psutil.disk_usage("/")
-            disk_usage = disk.percent
-
-            print(f"CPU Temp: {cpu_temp:.1f}°C | CPU Usage: {cpu_usage:.1f}% | "
-                  f"Memory Usage: {memory_usage:.1f}% | Disk Usage: {disk_usage:.1f}%")
-        except Exception as e:
-            pass
+        print(f"CPU Temp: {cpu_temp:.1f}°C | CPU Usage: {cpu_usage:.1f}% | "
+              f"Memory Usage: {memory_usage:.1f}% | Disk Usage: {disk_usage:.1f}%")
 
         # Timing control
         elapsed = time.time() - loop_start
