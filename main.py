@@ -163,7 +163,7 @@ def auto_shutdown():
 
     # Stop writing to the file and flush the buffer
     if packet_buffer:
-        with open("data.bin", "ab") as bin_file:
+        with open(data_filename, "ab") as bin_file:
             bin_file.write(b''.join(packet_buffer))
         packet_buffer = []
 
