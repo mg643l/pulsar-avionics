@@ -2,18 +2,18 @@ import subprocess
 import time
 import signal
 import sys
-import board  # type: ignore
+import board  
 import struct
 import pickle
-import serial  # type: ignore
-import adafruit_bmp3xx  # type: ignore
-import adafruit_lis331  # type: ignore
-import adafruit_mpu6050  # type: ignore
-import busio  # type: ignore
-import digitalio  # type: ignore
+import serial  
+import adafruit_bmp3xx  
+import adafruit_lis331  
+import adafruit_mpu6050  
+import busio  
+import digitalio  
 import os
 from datetime import datetime
-import psutil
+import psutil 
 
 # Constants
 BUFFER_SIZE = 50
@@ -137,7 +137,8 @@ def camera_interrupt(sig, frame):
     print("Video successfully recorded in H.264 format!")
     
     # Turn off pi
-    os.system("sudo shutdown -h now")
+    #os.system("sudo shutdown -h now")
+    sys.exit(0)  
 
 # Handles post-landing operations
 def auto_shutdown():
