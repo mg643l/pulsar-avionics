@@ -117,8 +117,6 @@ def auto_shutdown():
     print("Landing detected! Entering post-landing procedure.")
     landing_timer_start = time.time()
 
-    
-
     # Stop writing to the file and flush the buffer
     if packet_buffer:
         with open(data_filename, "ab") as bin_file:

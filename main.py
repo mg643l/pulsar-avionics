@@ -135,7 +135,9 @@ def camera_interrupt(sig, frame):
     video_process.terminate()
     video_process.wait()
     print("Video successfully recorded in H.264 format!")
-    sys.exit(0)
+    
+    # Turn off pi
+    os.system("sudo shutdown -h now")
 
 # Handles post-landing operations
 def auto_shutdown():
@@ -143,19 +145,6 @@ def auto_shutdown():
 
     print("Landing detected! Entering post-landing procedure.")
     landing_timer_start = time.time()
-
-    while True:
-        # Wait for 60 seconds while checking if landing is still true
-        if not landed:
-            print("Landing condition no longer true. Resetting timer.")
-            return  # Exit the function
-
-        elapsed_time = time.time() - landing_timer_start
-        if elapsed_time >= 60:
-            print("Landing confirmed after 60 seconds. Proceeding with shutdown.")
-            break
-
-        time.sleep(1)  # Check every second
 
     # Stop writing to the file and flush the buffer
     if packet_buffer:
@@ -165,10 +154,6 @@ def auto_shutdown():
 
     # Stop video recording
     camera_interrupt(signal.SIGINT, None)
-    print("Video recording stopped and data saved successfully.")
-
-    # Turn off pi
-    os.system("sudo shutdown -h now")
 
 # Initialise I2C
 i2c = busio.I2C(board.SCL, board.SDA)
@@ -282,9 +267,14 @@ with open(data_filename, "wb") as bin_file:
         previous_altitude = altitude
         previous_time = current_time
 
-        # If landing is detected, call the handle_landing function
-        if landed:
-            auto_shutdown()
+        # Track how long we've been in phase 4 (landed)
+        if phase == 4:
+            if landed_time is None:
+                landed_time = time.time()
+            elif time.time() - landed_time >= 10:
+                auto_shutdown()
+        else:
+            landed_time = None  # Reset if not in phase 4
 
         # Read GPS if available
         gps_data_received = False
