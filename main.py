@@ -27,6 +27,9 @@ APOGEE_SAMPLE_COUNT = 5
 LANDING_SAMPLE_COUNT = 10
 LANDING_THRESHOLD = 2.0
 
+ALTITUDE_AVG_WINDOW = 5 
+altitude_buffer = []
+
 # Flight milestone boolean flags
 on_launchpad = True
 launched = False
@@ -243,14 +246,24 @@ with open(data_filename, "wb") as bin_file:
         try:
             pressure = bmp.pressure
             altitude = calculate_altitude(pressure)
-            altitude = round(altitude, 1)  # Round altitude to 1 decimal place
             temperature = bmp.temperature
 
-            vertical_speed = calculate_vertical_speed(altitude, previous_altitude, current_time, previous_time)
+            # --- Moving average filter for altitude ---
+            altitude_buffer.append(altitude)
+            if len(altitude_buffer) > ALTITUDE_AVG_WINDOW:
+                altitude_buffer.pop(0)
+            smoothed_altitude = sum(altitude_buffer) / len(altitude_buffer)
 
+            vertical_speed = calculate_vertical_speed(
+                smoothed_altitude, 
+                previous_altitude, 
+                current_time, 
+                previous_time
+            )
         except:
             led.value = True
             pressure = altitude = temperature = vertical_speed = 0.0
+            smoothed_altitude = altitude  # fallback
 
         # Read MPU6050
         try:
@@ -266,7 +279,8 @@ with open(data_filename, "wb") as bin_file:
         # Update phase
         phase = flight_phase()
 
-        previous_altitude = altitude
+        # Use original altitude for logging and storage, but vertical_speed is now smoothed
+        previous_altitude = smoothed_altitude
         previous_time = current_time
 
         # Track how long we've been in phase 4 (landed)
