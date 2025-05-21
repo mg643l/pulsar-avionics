@@ -243,6 +243,7 @@ with open(data_filename, "wb") as bin_file:
         try:
             pressure = bmp.pressure
             altitude = calculate_altitude(pressure)
+            altitude = round(altitude, 1)  # Round altitude to 1 decimal place
             temperature = bmp.temperature
 
             vertical_speed = calculate_vertical_speed(altitude, previous_altitude, current_time, previous_time)
