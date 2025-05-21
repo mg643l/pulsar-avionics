@@ -39,41 +39,6 @@ burnout_counter = 0
 apogee_counter = 0
 landing_counter = 0
 
-# Welcome Screen
-pulsarString = """
-  _____  _    _ _       _____         _____
- |  __ \| |  | | |     / ____|  /\   |  __ \
- | |__) | |  | | |    | (___   /  \  | |__) |
- |  ___/| |  | | |     \___ \ / /\ \ |  _  /
- | |    | |__| | |____ ____) / ____ \| | \ \
- |_|     \____/|______|_____/_/    \_\_|  \_\
-
-"""
-
-lifts = """
-  _      _____ ______ _______ _____  __      ____   ___
- | |    |_   _|  ____|__   __/ ____| \ \    / /_ | |__ \
- | |      | | | |__     | | | (___    \ \  / / | |    ) |
- | |      | | |  __|    | |  \___ \    \ \/ /  | |   / /
- | |____ _| |_| |       | |  ____) |    \  /   | |_ / /_
- |______|_____|_|       |_| |_____/      \/    |_(_)____|
-
-
-
-  ______ _ _       _     _      _____                            _
- |  ____| (_)     | |   | |    / ____|                          | |
- | |__  | |_  __ _| |__ | |_  | |     ___  _ __ ___  _ __  _   _| |_ ___ _ __
- |  __| | | |/ _` | '_ \| __| | |    / _ \| '_ ` _ \| '_ \| | | | __/ _ \ '__|
- | |    | | | (_| | | | | |_  | |___| (_) | | | | | | |_) | |_| | ||  __/ |
- |_|    |_|_|\__, |_| |_|\__|  \_____\___/|_| |_| |_| .__/ \__,_|\__\___|_|
-              __/ |                                 | |
-             |___/                                  |_|
-
-
-"""
-print(pulsarString)
-print(lifts)
-
 # Calculate altitude from pressure using the barometric formula
 def calculate_altitude(pressure, ground_pressure=AIR_PRESSURE):
     return 44330.0 * (1.0 - (pressure / ground_pressure) ** (1 / 5.255))
@@ -194,7 +159,7 @@ def auto_shutdown():
 
     # Stop writing to the file and flush the buffer
     if packet_buffer:
-        with open("data.bin", "ab") as bin_file:
+        with open(data_filename, "ab") as bin_file:
             bin_file.write(b''.join(packet_buffer))
         packet_buffer = []
 
