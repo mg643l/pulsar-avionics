@@ -13,7 +13,8 @@ import busio  # type: ignore
 import digitalio  # type: ignore
 import os
 from datetime import datetime
-import psutil
+import psutil # type: ignore
+import threading
 
 # Constants
 BUFFER_SIZE = 50
@@ -27,6 +28,14 @@ APOGEE_SAMPLE_COUNT = 5
 LANDING_SAMPLE_COUNT = 10
 LANDING_THRESHOLD = 2.0
 
+PHASE_NAMES = [
+    "On Launchpad",
+    "Launched",
+    "Motor Burnout",
+    "Apogee",
+    "Landed"
+]
+
 # Flight milestone boolean flags
 on_launchpad = True
 launched = False
@@ -38,6 +47,26 @@ landed = False
 burnout_counter = 0
 apogee_counter = 0
 landing_counter = 0
+
+# For manual phase advancement
+phase_lock = threading.Lock()
+manual_phase = 0
+
+def advance_phase_on_keypress():
+    global manual_phase
+    while manual_phase < 4:
+        input("Press Enter to advance to the next phase...")
+        with phase_lock:
+            manual_phase += 1
+
+# Override flight_phase to use manual_phase
+def flight_phase():
+    with phase_lock:
+        return manual_phase
+
+# Override flight_milestone to do nothing
+def flight_milestone(y_accel, current_altitude, previous_altitude):
+    pass
 
 # Welcome Screen
 pulsarString = """
@@ -86,66 +115,6 @@ def calculate_vertical_speed(current_altitude, previous_altitude, current_time, 
     else:
         vertical_speed = 0.0
     return vertical_speed
-
-# Detect flight milestones based on acceleration and altitude
-def flight_milestone(y_accel, current_altitude, previous_altitude):
-    global on_launchpad, launched, motor_burnout, burnout_counter, apogee_detected, apogee_counter, landed, landing_counter
-
-    # Detect launch
-    if on_launchpad and not launched and y_accel > LAUNCH_THRESHOLD:
-        on_launchpad = False
-        launched = True
-        print("Launch detected! on_launchpad=False, launched=True")
-
-    # Detect motor burnout
-    if launched and not motor_burnout:
-        # Check if the acceleration is below the threshold for a certain number of samples
-        if y_accel < BURNOUT_THRESHOLD:
-            burnout_counter += 1  # Increment counter if condition is met
-            if burnout_counter >= BURNOUT_SAMPLE_COUNT:
-                motor_burnout = True
-                print("Motor burnout detected! motor_burnout=True")
-        else:
-            burnout_counter = 0  # Reset counter if condition is not met
-
-    # Detect apogee
-    if launched and not apogee_detected:
-        if current_altitude < previous_altitude:
-            # Check if the rocket is descending for a certain number of samples
-            apogee_counter += 1  # Increment counter if condition is met
-            if apogee_counter >= APOGEE_SAMPLE_COUNT:
-                apogee_detected = True
-                print("Apogee detected! apogee_detected=True")
-        else:
-            apogee_counter = 0  # Reset counter if condition is not met
-
-    # Detect landing
-    if launched and apogee_detected and not landed:
-        if abs(current_altitude - previous_altitude) <= LANDING_THRESHOLD:
-            landing_counter += 1
-            if landing_counter >= LANDING_SAMPLE_COUNT:
-                landed = True
-                print("Landing detected! landed=True")
-        else:
-            landing_counter = 0
-
-# Determine phase number
-# -1: Unknown, 0: on launchpad, 1: launched, 2: motor burnout, 3: apogee, 4: landing
-def flight_phase():
-    if on_launchpad:
-        current_phase = 0
-    elif launched and not motor_burnout:
-        current_phase = 1
-    elif motor_burnout and not apogee_detected:
-        current_phase = 2
-    elif apogee_detected and not landed:
-        current_phase = 3
-    elif landed:
-        current_phase = 4
-    else:
-        current_phase = -1  # Unknown phase
-
-    return current_phase
 
 # Load calibration offsets from a file
 def load_offsets(filename="offsets.bin"):
@@ -251,6 +220,10 @@ print("Recording video... Press Ctrl+C to stop.")
 # Handle Ctrl+C
 signal.signal(signal.SIGINT, camera_interrupt)
 
+# Start the keypress thread
+keypress_thread = threading.Thread(target=advance_phase_on_keypress, daemon=True)
+keypress_thread.start()
+
 # Prepare GPS default
 gps_last_data = {
     'latitude': 0.0, 'longitude': 0.0,
@@ -308,9 +281,6 @@ with open(data_filename, "wb") as bin_file:
             led.value = True
             ax = ay = az = gx = gy = gz = 0.0
 
-        # Update flight milestone
-        flight_milestone(y_cal, altitude, previous_altitude)
-
         # Update phase
         phase = flight_phase()
 
@@ -318,7 +288,7 @@ with open(data_filename, "wb") as bin_file:
         previous_time = current_time
 
         # If landing is detected, call the handle_landing function
-        if landed:
+        if phase == 4:
             auto_shutdown()
 
         # Read GPS if available
@@ -376,18 +346,8 @@ with open(data_filename, "wb") as bin_file:
             bin_file.write(b''.join(packet_buffer))
             packet_buffer = []
 
-        # Print variables
-        print(f"Time: {program_time:.3f}s")
-        print(f"H3LIS Accel: X={x_cal:.2f} Y={y_cal:.2f} Z={z_cal:.2f}")
-        print(f"MPU6050 Accel: X={ax:.2f} Y={ay:.2f} Z={az:.2f}")
-        print(f"MPU6050 Gyro: X={gx:.2f} Y={gy:.2f} Z={gz:.2f}")
-        print(f"Pressure: {pressure:.2f} hPa, Altitude: {altitude:.2f} m, Temp: {temperature:.2f} °C")
-        print(f"Vertical Speed: {vertical_speed:.2f} m/s")
-        print(f"GPS: Lat={gps_last_data['latitude']}, Lon={gps_last_data['longitude']}, "
-              f"Speed={gps_last_data['speed']} knots, Course={gps_last_data['course']}°")
-        print(f"Phase: {phase}")
-        print(f"CPU Temp: {cpu_temp:.1f}°C | CPU Usage: {cpu_usage:.1f}% | "
-              f"Memory Usage: {memory_usage:.1f}% | Disk Usage: {disk_usage:.1f}%")
+        # Print only the current phase
+        print(f"Current Phase: {PHASE_NAMES[phase]}")
 
         # Timing control
         elapsed = time.time() - loop_start
