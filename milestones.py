@@ -106,7 +106,9 @@ def camera_interrupt(sig, frame):
     video_process.terminate()
     video_process.wait()
     print("Video successfully recorded in H.264 format!")
-    sys.exit(0)
+    
+    # Turn off pi
+    os.system("sudo shutdown -h now")
 
 # Handles post-landing operations
 def auto_shutdown():
@@ -125,10 +127,6 @@ def auto_shutdown():
 
     # Stop video recording
     camera_interrupt(signal.SIGINT, None)
-    print("Video recording stopped and data saved successfully.")
-
-    # Turn off pi
-    os.system("sudo shutdown -h now")
 
 # Initialise I2C
 i2c = busio.I2C(board.SCL, board.SDA)
